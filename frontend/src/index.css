@@ -443,6 +443,16 @@ background-color: rgba(217, 119, 6, 0.05);
 }
 
 .stat-value {
-font-family: var(--font-mono);
-font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-canvas {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.editor-canvas img {
+  pointer-events: none;
 }

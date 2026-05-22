@@ -44,8 +44,8 @@ function App() {
               <h1 className="text-lg font-serif font-normal tracking-tight text-[var(--color-cream)]">Kakapo</h1>
             </div>
             <div className="flex items-center gap-4">
-              <span className="label-mono text-[var(--color-primary)]">100% local</span>
-              <span className="label-mono text-[var(--color-text-muted)]">WebP · JPEG · PNG</span>
+        <span className="label-mono text-[var(--color-primary)]">100% local</span>
+        <span className="label-mono text-[var(--color-text-muted)]">Edit · Compress · Export</span>
             </div>
           </div>
         </header>
