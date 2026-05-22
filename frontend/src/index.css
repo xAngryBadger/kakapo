@@ -75,11 +75,11 @@ line-height: 1.2;
 letter-spacing: -0.01em;
 }
 
-h1 {
-font-size: var(--h1-size);
-letter-spacing: 0.2em;
-font-weight: 400;
-text-transform: uppercase;
+h1:not(.font-sans) {
+  font-size: var(--h1-size);
+  letter-spacing: 0.2em;
+  font-weight: 400;
+  text-transform: uppercase;
 }
 
 h2 {

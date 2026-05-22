@@ -50,7 +50,9 @@ function App() {
           </div>
         </header>
 
+        <main className={`max-w-7xl mx-auto px-6 pb-16 lg:px-8 transition-[padding] duration-300 ${bannerVisible ? 'pt-[7rem]' : 'pt-20'}`}>
         <ImageStudio />
+      </main>
 
         <footer className="fade-border-top px-6 py-6 mt-8">
           <div className="max-w-7xl mx-auto flex items-center justify-between">

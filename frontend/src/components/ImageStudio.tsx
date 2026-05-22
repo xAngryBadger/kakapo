@@ -97,8 +97,7 @@ export function ImageStudio() {
   const doneCount = images.filter((img) => img.status === 'done').length
 
   return (
-    <main className="max-w-7xl mx-auto px-6 pt-20 pb-16 lg:px-8">
-      <motion.div
+    <motion.div
         initial="hidden"
         animate="visible"
         variants={staggerContainer}
@@ -388,8 +387,7 @@ export function ImageStudio() {
               )}
             </motion.div>
           </div>
-        </div>
-      </motion.div>
-    </main>
-  )
+</div>
+</motion.div>
+)
 }
