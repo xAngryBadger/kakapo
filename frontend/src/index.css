@@ -33,8 +33,13 @@
 --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+select option {
+  background-color: var(--color-bg-alt);
+  color: var(--color-text);
+}
+
 :root {
---h1-size: clamp(2.5rem, 5vw, 4.5rem);
+  --h1-size: clamp(2.5rem, 5vw, 4.5rem);
 --h2-size: clamp(1.75rem, 3vw, 2.5rem);
 --h3-size: clamp(1.25rem, 2vw, 1.75rem);
 --h4-size: clamp(1.125rem, 1.5vw, 1.5rem);

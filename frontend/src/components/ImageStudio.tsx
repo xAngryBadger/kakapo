@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { revealVariants, staggerContainer } from '../hooks/useScrollReveal'
 import { ComparisonSlider } from './ComparisonSlider'
@@ -42,22 +42,34 @@ export function ImageStudio() {
   const [histories, setHistories] = useState<Map<string, HistoryEntry[]>>(new Map())
   const [historyIndices, setHistoryIndices] = useState<Map<string, number>>(new Map())
 
-  const [editedUrl, setEditedUrl] = useState<string | null>(null)
+  const [editedUrls, setEditedUrls] = useState<Map<string, string>>(new Map())
   const [isExporting, setIsExporting] = useState(false)
+
+  const pendingEditRef = useRef<EditState | null>(null)
+  const pendingLabelRef = useRef<string>('')
 
   const selectedImage = images[selectedIndex] ?? null
 
-  const currentEdit: EditState = selectedImage
-    ? (editStates.get(selectedImage.id) ?? { ...DEFAULT_EDIT_STATE })
-    : { ...DEFAULT_EDIT_STATE }
+  const currentEdit: EditState = useMemo(() =>
+    selectedImage
+      ? (editStates.get(selectedImage.id) ?? { ...DEFAULT_EDIT_STATE })
+      : { ...DEFAULT_EDIT_STATE },
+    [selectedImage, editStates],
+  )
 
-  const currentHistory: HistoryEntry[] = selectedImage
-    ? (histories.get(selectedImage.id) ?? [{ state: { ...DEFAULT_EDIT_STATE }, label: 'Initial' }])
-    : [{ state: { ...DEFAULT_EDIT_STATE }, label: 'Initial' }]
+  const currentHistory: HistoryEntry[] = useMemo(() =>
+    selectedImage
+      ? (histories.get(selectedImage.id) ?? [{ state: { ...DEFAULT_EDIT_STATE }, label: 'Initial' }])
+      : [{ state: { ...DEFAULT_EDIT_STATE }, label: 'Initial' }],
+    [selectedImage, histories],
+  )
 
-  const currentHistoryIndex: number = selectedImage
-    ? (historyIndices.get(selectedImage.id) ?? 0)
-    : 0
+  const currentHistoryIndex: number = useMemo(() =>
+    selectedImage
+      ? (historyIndices.get(selectedImage.id) ?? 0)
+      : 0,
+    [selectedImage, historyIndices],
+  )
 
   const canUndo = currentHistoryIndex > 0
   const canRedo = currentHistoryIndex < currentHistory.length - 1
@@ -82,10 +94,61 @@ export function ImageStudio() {
         next.set(selectedImage.id, newIndex)
         return next
       })
-      setEditedUrl(null)
+      setEditedUrls((prev) => {
+        if (!prev.has(selectedImage.id)) return prev
+        const next = new Map(prev)
+        const old = next.get(selectedImage.id)
+        if (old) URL.revokeObjectURL(old)
+        next.delete(selectedImage.id)
+        return next
+      })
     },
     [selectedImage, currentHistory],
   )
+
+  const setEditWithoutHistory = useCallback(
+    (edit: EditState, label: string = 'Edit') => {
+      if (!selectedImage) return
+      pendingEditRef.current = edit
+      pendingLabelRef.current = label
+      setEditStates((prev) => {
+        const next = new Map(prev)
+        next.set(selectedImage.id, edit)
+        return next
+      })
+    },
+    [selectedImage],
+  )
+
+  const flushHistory = useCallback(() => {
+    if (!selectedImage || !pendingEditRef.current) return
+    const edit = pendingEditRef.current
+    const label = pendingLabelRef.current
+    pendingEditRef.current = null
+    pendingLabelRef.current = ''
+
+    const history = histories.get(selectedImage.id) ?? [{ state: { ...DEFAULT_EDIT_STATE }, label: 'Initial' }]
+    const newHistory = pushHistory(history, edit, label)
+    const newIndex = newHistory.length - 1
+    setHistories((prev) => {
+      const next = new Map(prev)
+      next.set(selectedImage.id, newHistory)
+      return next
+    })
+    setHistoryIndices((prev) => {
+      const next = new Map(prev)
+      next.set(selectedImage.id, newIndex)
+      return next
+    })
+    setEditedUrls((prev) => {
+      if (!prev.has(selectedImage.id)) return prev
+      const next = new Map(prev)
+      const old = next.get(selectedImage.id)
+      if (old) URL.revokeObjectURL(old)
+      next.delete(selectedImage.id)
+      return next
+    })
+  }, [selectedImage, histories])
 
   const handleUndo = useCallback(() => {
     if (!selectedImage) return
@@ -101,7 +164,14 @@ export function ImageStudio() {
       next.set(selectedImage.id, newIndex)
       return next
     })
-    setEditedUrl(null)
+    setEditedUrls((prev) => {
+      if (!prev.has(selectedImage.id)) return prev
+      const next = new Map(prev)
+      const old = next.get(selectedImage.id)
+      if (old) URL.revokeObjectURL(old)
+      next.delete(selectedImage.id)
+      return next
+    })
   }, [selectedImage, currentHistory, currentHistoryIndex])
 
   const handleRedo = useCallback(() => {
@@ -118,8 +188,41 @@ export function ImageStudio() {
       next.set(selectedImage.id, newIndex)
       return next
     })
-    setEditedUrl(null)
+    setEditedUrls((prev) => {
+      if (!prev.has(selectedImage.id)) return prev
+      const next = new Map(prev)
+      const old = next.get(selectedImage.id)
+      if (old) URL.revokeObjectURL(old)
+      next.delete(selectedImage.id)
+      return next
+    })
   }, [selectedImage, currentHistory, currentHistoryIndex])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedImage) return
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        if (canUndo) handleUndo()
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        if (canRedo) handleRedo()
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (activeTool === 'text' && currentEdit.textOverlays.length > 0) {
+          const last = currentEdit.textOverlays[currentEdit.textOverlays.length - 1]
+          setCurrentEdit(
+            { ...currentEdit, textOverlays: currentEdit.textOverlays.filter((t) => t.id !== last.id) },
+            'Delete Text',
+          )
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedImage, canUndo, canRedo, handleUndo, handleRedo, activeTool, currentEdit, setCurrentEdit])
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const valid = Array.from(files).filter((f) => f.type.startsWith('image/'))
@@ -175,13 +278,18 @@ export function ImageStudio() {
         options.format,
         options.quality,
       )
-      if (editedUrl) URL.revokeObjectURL(editedUrl)
-      setEditedUrl(result.url)
+      setEditedUrls((prev) => {
+        const next = new Map(prev)
+        const old = next.get(selectedImage.id)
+        if (old) URL.revokeObjectURL(old)
+        next.set(selectedImage.id, result.url)
+        return next
+      })
     } catch {
       // silent
     }
     setIsExporting(false)
-  }, [selectedImage, currentEdit, options.format, options.quality, editedUrl])
+  }, [selectedImage, currentEdit, options.format, options.quality])
 
   const handleDownload = useCallback(
     (img: ImageFile) => {
@@ -194,11 +302,13 @@ export function ImageStudio() {
   )
 
   const handleDownloadEdited = useCallback(() => {
-    if (!editedUrl || !selectedImage) return
+    if (!selectedImage) return
+    const url = editedUrls.get(selectedImage.id)
+    if (!url) return
     const baseName = selectedImage.file.name.replace(/\.[^.]+$/, '')
     const ext = getOutputExtension(options.format)
-    downloadBlob(editedUrl, `${baseName}-edited${ext}`)
-  }, [editedUrl, selectedImage, options.format])
+    downloadBlob(url, `${baseName}-edited${ext}`)
+  }, [editedUrls, selectedImage, options.format])
 
   const handleDownloadAll = useCallback(() => {
     images
@@ -210,17 +320,43 @@ export function ImageStudio() {
     (id: string) => {
       setImages((prev) => {
         const idx = prev.findIndex((i) => i.id === id)
+        const img = prev[idx]
+        if (img) {
+          URL.revokeObjectURL(img.originalUrl)
+          if (img.compressedUrl) URL.revokeObjectURL(img.compressedUrl)
+        }
         const updated = prev.filter((i) => i.id !== id)
-        if (selectedIndex >= updated.length) {
-          setSelectedIndex(Math.max(0, updated.length - 1))
+
+        let nextSel = selectedIndex
+        if (idx < selectedIndex) {
+          nextSel = selectedIndex - 1
+        } else if (idx === selectedIndex) {
+          nextSel = Math.min(selectedIndex, updated.length - 1)
         }
-        if (idx <= selectedIndex && selectedIndex > 0) {
-          setSelectedIndex((s) => s - 1)
-        }
+        if (nextSel < 0) nextSel = 0
+        setSelectedIndex(nextSel)
+
         return updated
       })
       setEditStates((prev) => {
         const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
+      setHistories((prev) => {
+        const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
+      setHistoryIndices((prev) => {
+        const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
+      setEditedUrls((prev) => {
+        const next = new Map(prev)
+        const old = next.get(id)
+        if (old) URL.revokeObjectURL(old)
         next.delete(id)
         return next
       })
@@ -230,10 +366,14 @@ export function ImageStudio() {
 
   const handleCropChange = useCallback(
     (crop: CropRect) => {
-      setCurrentEdit({ ...currentEdit, crop }, 'Crop')
+      setEditWithoutHistory({ ...currentEdit, crop }, 'Crop')
     },
-    [currentEdit, setCurrentEdit],
+    [currentEdit, setEditWithoutHistory],
   )
+
+  const handleCropDragEnd = useCallback(() => {
+    if (pendingEditRef.current) flushHistory()
+  }, [flushHistory])
 
   const handleStartCrop = useCallback(() => {
     if (!selectedImage) return
@@ -246,14 +386,43 @@ export function ImageStudio() {
     setCurrentEdit({ ...currentEdit, crop: initialCrop }, 'Start Crop')
   }, [selectedImage, currentEdit, setCurrentEdit])
 
-  const handleApplyCrop = useCallback(() => {
+  const handleApplyCrop = useCallback(async () => {
     if (!currentEdit.crop || !selectedImage) return
-    handleExportEdit()
-  }, [currentEdit.crop, selectedImage, handleExportEdit])
+    setIsExporting(true)
+    try {
+      const result = await applyEdits(
+        selectedImage.originalUrl,
+        selectedImage.originalWidth,
+        selectedImage.originalHeight,
+        currentEdit,
+        options.format,
+        options.quality,
+      )
+      const croppedUrl = result.url
+      setEditedUrls((prev) => {
+        const next = new Map(prev)
+        const old = next.get(selectedImage.id)
+        if (old) URL.revokeObjectURL(old)
+        next.set(selectedImage.id, croppedUrl)
+        return next
+      })
+    } catch {
+      // silent
+    }
+    setIsExporting(false)
+  }, [currentEdit, selectedImage, options.format, options.quality])
 
   const handleCancelCrop = useCallback(() => {
-    setCurrentEdit({ ...currentEdit, crop: null }, 'Cancel Crop')
-  }, [currentEdit, setCurrentEdit])
+    if (!selectedImage) return
+    const history = histories.get(selectedImage.id) ?? [{ state: { ...DEFAULT_EDIT_STATE }, label: 'Initial' }]
+    const idx = historyIndices.get(selectedImage.id) ?? 0
+    const preCropState = history[idx].state
+    if (preCropState.crop) {
+      setCurrentEdit({ ...preCropState, crop: null }, 'Cancel Crop')
+    } else {
+      setCurrentEdit({ ...currentEdit, crop: null }, 'Cancel Crop')
+    }
+  }, [selectedImage, histories, historyIndices, currentEdit, setCurrentEdit])
 
   const handleAddTextAt = useCallback(
     (x: number, y: number) => {
@@ -271,6 +440,42 @@ export function ImageStudio() {
     [currentEdit, setCurrentEdit],
   )
 
+  const handleTextOverlayMove = useCallback(
+    (id: string, x: number, y: number) => {
+      const overlays = currentEdit.textOverlays.map((o) =>
+        o.id === id ? { ...o, x, y } : o,
+      )
+      setEditWithoutHistory({ ...currentEdit, textOverlays: overlays }, 'Move Text')
+    },
+    [currentEdit, setEditWithoutHistory],
+  )
+
+  const handleFilterChange = useCallback(
+    (filters: typeof currentEdit.filters) => {
+      setEditWithoutHistory({ ...currentEdit, filters }, 'Filter')
+    },
+    [currentEdit, setEditWithoutHistory],
+  )
+
+  const handleFilterChangeEnd = useCallback(() => {
+    if (pendingEditRef.current) flushHistory()
+  }, [flushHistory])
+
+  const handleFilterReset = useCallback(() => {
+    setCurrentEdit({ ...currentEdit, filters: { ...DEFAULT_FILTERS } }, 'Reset Filters')
+  }, [currentEdit, setCurrentEdit])
+
+  const handleTransformChange = useCallback(
+    (edit: EditState) => {
+      setEditWithoutHistory(edit, 'Transform')
+    },
+    [setEditWithoutHistory],
+  )
+
+  const handleTransformChangeEnd = useCallback(() => {
+    if (pendingEditRef.current) flushHistory()
+  }, [flushHistory])
+
   const hasEdits =
     currentEdit.rotation !== 0 ||
     currentEdit.flipH ||
@@ -282,6 +487,8 @@ export function ImageStudio() {
   const totalOriginal = images.reduce((sum, img) => sum + img.originalSize, 0)
   const totalCompressed = images.reduce((sum, img) => sum + (img.compressedSize ?? 0), 0)
   const doneCount = images.filter((img) => img.status === 'done').length
+
+  const editedUrl = selectedImage ? (editedUrls.get(selectedImage.id) ?? null) : null
 
   return (
     <motion.div
@@ -439,39 +646,47 @@ export function ImageStudio() {
                           onChange={(e) =>
                             handleCropChange({ ...currentEdit.crop!, x: Math.max(0, parseInt(e.target.value) || 0) })
                           }
-                          className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] stat-value"
-                        />
-                      </div>
-                      <div>
-                        <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Y</label>
-                        <input
-                          type="number"
-                          value={Math.round(currentEdit.crop.y)}
-                          onChange={(e) =>
-                            handleCropChange({ ...currentEdit.crop!, y: Math.max(0, parseInt(e.target.value) || 0) })
-                          }
-                          className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] stat-value"
-                        />
-                      </div>
-                      <div>
-                        <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Width</label>
-                        <input
-                          type="number"
-                          value={Math.round(currentEdit.crop.width)}
-                          onChange={(e) =>
-                            handleCropChange({ ...currentEdit.crop!, width: Math.max(20, parseInt(e.target.value) || 20) })
-                          }
-                          className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] stat-value"
-                        />
-                      </div>
-                      <div>
-                        <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Height</label>
-                        <input
-                          type="number"
-                          value={Math.round(currentEdit.crop.height)}
-                          onChange={(e) =>
-                            handleCropChange({ ...currentEdit.crop!, height: Math.max(20, parseInt(e.target.value) || 20) })
-                          }
+                        onPointerUp={handleCropDragEnd}
+                        onBlur={handleCropDragEnd}
+                        className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] stat-value"
+                      />
+                    </div>
+                    <div>
+                      <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Y</label>
+                      <input
+                        type="number"
+                        value={Math.round(currentEdit.crop.y)}
+                        onChange={(e) =>
+                          handleCropChange({ ...currentEdit.crop!, y: Math.max(0, parseInt(e.target.value) || 0) })
+                        }
+                        onPointerUp={handleCropDragEnd}
+                        onBlur={handleCropDragEnd}
+                        className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] stat-value"
+                      />
+                    </div>
+                    <div>
+                      <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Width</label>
+                      <input
+                        type="number"
+                        value={Math.round(currentEdit.crop.width)}
+                        onChange={(e) =>
+                          handleCropChange({ ...currentEdit.crop!, width: Math.max(20, parseInt(e.target.value) || 20) })
+                        }
+                        onPointerUp={handleCropDragEnd}
+                        onBlur={handleCropDragEnd}
+                        className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] stat-value"
+                      />
+                    </div>
+                    <div>
+                      <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Height</label>
+                      <input
+                        type="number"
+                        value={Math.round(currentEdit.crop.height)}
+                        onChange={(e) =>
+                          handleCropChange({ ...currentEdit.crop!, height: Math.max(20, parseInt(e.target.value) || 20) })
+                        }
+                        onPointerUp={handleCropDragEnd}
+                        onBlur={handleCropDragEnd}
                           className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] stat-value"
                         />
                       </div>
@@ -503,8 +718,9 @@ export function ImageStudio() {
                 </div>
                 <FilterPanel
                   filters={currentEdit.filters}
-                  onChange={(filters) => setCurrentEdit({ ...currentEdit, filters }, 'Filter')}
-                  onReset={() => setCurrentEdit({ ...currentEdit, filters: { ...DEFAULT_FILTERS } }, 'Reset Filters')}
+                  onChange={handleFilterChange}
+                  onChangeEnd={handleFilterChangeEnd}
+                  onReset={handleFilterReset}
                 />
               </div>
             )}
@@ -515,7 +731,7 @@ export function ImageStudio() {
                   <span className="section-number">04</span>
                   <h3 className="text-xl font-serif font-normal text-[var(--color-cream)]">Transform</h3>
                 </div>
-                <RotatePanel edit={currentEdit} onEditChange={(edit) => setCurrentEdit(edit, 'Transform')} />
+                <RotatePanel edit={currentEdit} onEditChange={handleTransformChange} onEditChangeEnd={handleTransformChangeEnd} />
               </div>
             )}
 
@@ -552,8 +768,8 @@ export function ImageStudio() {
                       </>
                     )
                     : doneCount > 0
-                      ? `Comprimir ${images.filter((i) => i.status === 'pending' || i.status === 'error').length || '0'} restantes`
-                      : `Comprimir ${images.length || '0'} imagens`}
+                    ? `Comprimir ${images.filter((i) => i.status === 'pending' || i.status === 'error').length || '0'} restantes`
+                    : `Comprimir ${images.length || '0'} imagens`}
                 </span>
               </button>
 
@@ -714,7 +930,10 @@ export function ImageStudio() {
                     edit={currentEdit}
                     activeTool={activeTool}
                     onCropChange={handleCropChange}
+                    onCropDragEnd={handleCropDragEnd}
                     onEditTextAt={handleAddTextAt}
+                    onTextOverlayMove={handleTextOverlayMove}
+                    onTextDragEnd={flushHistory}
                   />
                 )}
 

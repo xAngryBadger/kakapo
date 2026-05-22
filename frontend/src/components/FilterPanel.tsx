@@ -3,6 +3,7 @@ import { type FilterState, DEFAULT_FILTERS } from '../lib/imageEngine'
 interface FilterPanelProps {
   filters: FilterState
   onChange: (filters: FilterState) => void
+  onChangeEnd: () => void
   onReset: () => void
 }
 
@@ -14,7 +15,7 @@ const sliders: { key: keyof FilterState; label: string; min: number; max: number
   { key: 'hueRotate', label: 'Hue Rotate', min: -180, max: 180, step: 1, unit: 'deg' },
 ]
 
-export function FilterPanel({ filters, onChange, onReset }: FilterPanelProps) {
+export function FilterPanel({ filters, onChange, onChangeEnd, onReset }: FilterPanelProps) {
   const isDefault = JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS)
 
   return (
@@ -42,6 +43,7 @@ export function FilterPanel({ filters, onChange, onReset }: FilterPanelProps) {
             step={step}
             value={filters[key]}
             onChange={(e) => onChange({ ...filters, [key]: parseFloat(e.target.value) })}
+            onPointerUp={onChangeEnd}
             className="w-full accent-[var(--color-primary)]"
           />
         </div>

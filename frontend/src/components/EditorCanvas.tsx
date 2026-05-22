@@ -8,7 +8,10 @@ interface EditorCanvasProps {
   edit: EditState
   activeTool: ToolMode
   onCropChange: (crop: CropRect) => void
+  onCropDragEnd?: () => void
   onEditTextAt?: (x: number, y: number) => void
+  onTextOverlayMove?: (id: string, x: number, y: number) => void
+  onTextDragEnd?: () => void
 }
 
 type DragHandle = 'tl' | 'tr' | 'bl' | 'br' | 'tm' | 'bm' | 'ml' | 'mr' | 'move' | null
@@ -20,16 +23,36 @@ export function EditorCanvas({
   edit,
   activeTool,
   onCropChange,
+  onCropDragEnd,
   onEditTextAt,
+  onTextOverlayMove,
+  onTextDragEnd,
 }: EditorCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const [containerW, setContainerW] = useState(0)
   const [dragHandle, setDragHandle] = useState<DragHandle>(null)
   const dragStart = useRef<{ mx: number; my: number; crop: CropRect }>({ mx: 0, my: 0, crop: { x: 0, y: 0, width: 0, height: 0 } })
 
-  const imageDisplayW = containerRef.current?.clientWidth ?? 0
+  const [draggingTextId, setDraggingTextId] = useState<string | null>(null)
+  const textDragStart = useRef<{ mx: number; my: number; ox: number; oy: number }>({ mx: 0, my: 0, ox: 0, oy: 0 })
+
+  const imageDisplayW = containerW
   const imageDisplayH = imageDisplayW > 0 ? (originalHeight / originalWidth) * imageDisplayW : 0
-  const scaleX = imageDisplayW / originalWidth
-  const scaleY = imageDisplayH / originalHeight
+  const scaleX = imageDisplayW > 0 ? imageDisplayW / originalWidth : 1
+  const scaleY = imageDisplayH > 0 ? imageDisplayH / originalHeight : 1
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerW(entry.contentRect.width)
+      }
+    })
+    ro.observe(el)
+    setContainerW(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
 
   const filterCSS = buildFilterCSS(edit.filters)
   const transformParts: string[] = []
@@ -45,6 +68,7 @@ export function EditorCanvas({
     (e: React.PointerEvent, handle: DragHandle) => {
       if (!handle || !crop) return
       e.preventDefault()
+      e.stopPropagation()
       e.currentTarget.setPointerCapture(e.pointerId)
       setDragHandle(handle)
       dragStart.current = { mx: e.clientX, my: e.clientY, crop: { ...crop } }
@@ -54,42 +78,56 @@ export function EditorCanvas({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!dragHandle || !crop) return
-      const dx = (e.clientX - dragStart.current.mx) / scaleX
-      const dy = (e.clientY - dragStart.current.my) / scaleY
-      const c = dragStart.current.crop
+      if (dragHandle && crop) {
+        const dx = (e.clientX - dragStart.current.mx) / scaleX
+        const dy = (e.clientY - dragStart.current.my) / scaleY
+        const c = dragStart.current.crop
 
-      let next = { ...c }
+        let next = { ...c }
 
-      if (dragHandle === 'move') {
-        next.x = Math.max(0, Math.min(originalWidth - c.width, c.x + dx))
-        next.y = Math.max(0, Math.min(originalHeight - c.height, c.y + dy))
-      } else {
-        let { x, y, width, height } = c
+        if (dragHandle === 'move') {
+          next.x = Math.max(0, Math.min(originalWidth - c.width, c.x + dx))
+          next.y = Math.max(0, Math.min(originalHeight - c.height, c.y + dy))
+        } else {
+          let { x, y, width, height } = c
 
-        if (dragHandle.includes('l')) { x = c.x + dx; width = c.width - dx }
-        if (dragHandle.includes('r')) { width = c.width + dx }
-        if (dragHandle.includes('t')) { y = c.y + dy; height = c.height - dy }
-        if (dragHandle.includes('b')) { height = c.height + dy }
+          if (dragHandle.includes('l')) { x = c.x + dx; width = c.width - dx }
+          if (dragHandle.includes('r')) { width = c.width + dx }
+          if (dragHandle.includes('t')) { y = c.y + dy; height = c.height - dy }
+          if (dragHandle.includes('b')) { height = c.height + dy }
 
-        if (width < 20) { width = 20; if (dragHandle.includes('l')) x = c.x + c.width - 20 }
-        if (height < 20) { height = 20; if (dragHandle.includes('t')) y = c.y + c.height - 20 }
-        x = Math.max(0, x)
-        y = Math.max(0, y)
-        if (x + width > originalWidth) width = originalWidth - x
-        if (y + height > originalHeight) height = originalHeight - y
+          if (width < 20) { width = 20; if (dragHandle.includes('l')) x = c.x + c.width - 20 }
+          if (height < 20) { height = 20; if (dragHandle.includes('t')) y = c.y + c.height - 20 }
+          x = Math.max(0, x)
+          y = Math.max(0, y)
+          if (x + width > originalWidth) width = originalWidth - x
+          if (y + height > originalHeight) height = originalHeight - y
 
-        next = { x, y, width, height }
+          next = { x, y, width, height }
+        }
+
+        onCropChange(next)
       }
 
-      onCropChange(next)
+      if (draggingTextId) {
+        const dx = (e.clientX - textDragStart.current.mx) / scaleX
+        const dy = (e.clientY - textDragStart.current.my) / scaleY
+        onTextOverlayMove?.(
+          draggingTextId,
+          Math.max(0, Math.min(originalWidth, textDragStart.current.ox + dx)),
+          Math.max(0, Math.min(originalHeight, textDragStart.current.oy + dy)),
+        )
+      }
     },
-    [dragHandle, crop, scaleX, scaleY, originalWidth, originalHeight, onCropChange],
+    [dragHandle, draggingTextId, crop, scaleX, scaleY, originalWidth, originalHeight, onCropChange, onTextOverlayMove],
   )
 
   const handlePointerUp = useCallback(() => {
+    if (dragHandle) onCropDragEnd?.()
+    if (draggingTextId) onTextDragEnd?.()
     setDragHandle(null)
-  }, [])
+    setDraggingTextId(null)
+  }, [dragHandle, draggingTextId, onCropDragEnd, onTextDragEnd])
 
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent) => {
@@ -102,9 +140,16 @@ export function EditorCanvas({
     [activeTool, scaleX, scaleY, onEditTextAt],
   )
 
-  useEffect(() => {
-    if (dragHandle) return
-  }, [dragHandle])
+  const handleTextPointerDown = useCallback(
+    (e: React.PointerEvent, overlayId: string, ox: number, oy: number) => {
+      e.preventDefault()
+      e.stopPropagation()
+      e.currentTarget.setPointerCapture(e.pointerId)
+      setDraggingTextId(overlayId)
+      textDragStart.current = { mx: e.clientX, my: e.clientY, ox, oy }
+    },
+    [],
+  )
 
   const handleCursor: Record<string, string> = {
     tl: 'nwse-resize',
@@ -151,7 +196,10 @@ export function EditorCanvas({
         />
 
         {showCrop && crop && (
-          <>
+          <div
+            className="absolute inset-0"
+            style={{ transform: transformCSS, transformOrigin: 'center center' }}
+          >
             <div
               className="absolute border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary)]/5 pointer-events-none"
               style={{
@@ -166,10 +214,10 @@ export function EditorCanvas({
               className="absolute inset-0 pointer-events-none"
               style={{
                 clipPath: `polygon(
-                  0% 0%, 0% 100%, ${(crop.x / originalWidth) * 100}% 100%, ${(crop.x / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%,
-                  ${((crop.x + crop.width) / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%, ${((crop.x + crop.width) / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%,
-                  ${(crop.x / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%, ${(crop.x / originalWidth) * 100}% 100%, 100% 100%, 100% 0%
-                )`,
+  0% 0%, 0% 100%, ${(crop.x / originalWidth) * 100}% 100%, ${(crop.x / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%,
+  ${((crop.x + crop.width) / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%, ${((crop.x + crop.width) / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%,
+  ${(crop.x / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%, ${(crop.x / originalWidth) * 100}% 100%, 100% 100%, 100% 0%
+)`,
                 backgroundColor: 'rgba(12,10,9,0.6)',
               }}
             />
@@ -198,20 +246,22 @@ export function EditorCanvas({
               }}
               onPointerDown={(e) => handlePointerDown(e, 'move')}
             />
-          </>
+          </div>
         )}
 
         {activeTool === 'text' &&
           edit.textOverlays.map((overlay) => (
             <div
               key={overlay.id}
-              className="absolute pointer-events-none"
+              onPointerDown={(e) => handleTextPointerDown(e, overlay.id, overlay.x, overlay.y)}
+              className="absolute cursor-move select-none"
               style={{
                 left: `${overlay.x * scaleX}px`,
                 top: `${overlay.y * scaleY}px`,
                 fontSize: `${overlay.fontSize * scaleY}px`,
                 fontFamily: overlay.fontFamily,
                 color: overlay.fill,
+                lineHeight: 1.2,
               }}
             >
               {overlay.text}

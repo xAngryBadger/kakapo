@@ -225,118 +225,129 @@ export function computeEditedDimensions(
   originalHeight: number,
   edit: EditState,
 ): { width: number; height: number } {
+  if (edit.crop) {
+    return {
+      width: Math.max(1, Math.round(edit.crop.width)),
+      height: Math.max(1, Math.round(edit.crop.height)),
+    }
+  }
+
   const radians = (edit.rotation * Math.PI) / 180
   const absCos = Math.abs(Math.cos(radians))
   const absSin = Math.abs(Math.sin(radians))
-  let w = Math.round(originalWidth * absCos + originalHeight * absSin)
-  let h = Math.round(originalWidth * absSin + originalHeight * absCos)
-
-  if (edit.crop) {
-    w = Math.round(edit.crop.width)
-    h = Math.round(edit.crop.height)
-  }
+  const w = Math.round(originalWidth * absCos + originalHeight * absSin)
+  const h = Math.round(originalWidth * absSin + originalHeight * absCos)
 
   return { width: Math.max(1, w), height: Math.max(1, h) }
 }
 
+function drawRotatedFlipped(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  srcW: number,
+  srcH: number,
+  radians: number,
+  flipH: boolean,
+  flipV: boolean,
+) {
+  const absCos = Math.abs(Math.cos(radians))
+  const absSin = Math.abs(Math.sin(radians))
+  const rotW = Math.round(srcW * absCos + srcH * absSin)
+  const rotH = Math.round(srcW * absSin + srcH * absCos)
+
+  ctx.save()
+  ctx.translate(rotW / 2, rotH / 2)
+  ctx.rotate(radians)
+  if (flipH) ctx.scale(-1, 1)
+  if (flipV) ctx.scale(1, -1)
+  ctx.drawImage(img, -srcW / 2, -srcH / 2, srcW, srcH)
+  ctx.restore()
+}
+
 export async function applyEdits(
   imageSrc: string,
-  originalWidth: number,
-  originalHeight: number,
+  _originalWidth: number,
+  _originalHeight: number,
   edit: EditState,
   format: string = 'image/png',
   quality: number = 1,
 ): Promise<{ blob: Blob; url: string; width: number; height: number }> {
   const img = await loadImage(imageSrc)
-  const canvas = document.createElement('canvas')
-
-  let srcW = img.naturalWidth
-  let srcH = img.naturalHeight
-
+  const srcW = img.naturalWidth
+  const srcH = img.naturalHeight
   const radians = (edit.rotation * Math.PI) / 180
   const absCos = Math.abs(Math.cos(radians))
   const absSin = Math.abs(Math.sin(radians))
-
-  let canvasW = Math.round(srcW * absCos + srcH * absSin)
-  let canvasH = Math.round(srcW * absSin + srcH * absCos)
-
-  if (edit.crop) {
-    canvasW = Math.round(edit.crop.width)
-    canvasH = Math.round(edit.crop.height)
-  }
-
-  canvas.width = Math.max(1, canvasW)
-  canvas.height = Math.max(1, canvasH)
-
-  const ctx = canvas.getContext('2d')!
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
+  const rotW = Math.round(srcW * absCos + srcH * absSin)
+  const rotH = Math.round(srcW * absSin + srcH * absCos)
 
   const filterCSS = buildFilterCSS(edit.filters)
-  if (filterCSS !== 'none') {
-    ctx.filter = filterCSS
-  }
+
+  let finalCanvas: HTMLCanvasElement
 
   if (edit.crop) {
-    ctx.save()
-    ctx.translate(canvasW / 2, canvasH / 2)
-    ctx.rotate(radians)
-    if (edit.flipH) ctx.scale(-1, 1)
-    if (edit.flipV) ctx.scale(1, -1)
-    ctx.drawImage(img, -srcW / 2, -srcH / 2, srcW, srcH)
-    ctx.restore()
+    const rotCanvas = document.createElement('canvas')
+    rotCanvas.width = Math.max(1, rotW)
+    rotCanvas.height = Math.max(1, rotH)
+    const rotCtx = rotCanvas.getContext('2d')!
+    rotCtx.imageSmoothingEnabled = true
+    rotCtx.imageSmoothingQuality = 'high'
+    if (filterCSS !== 'none') rotCtx.filter = filterCSS
+    drawRotatedFlipped(rotCtx, img, srcW, srcH, radians, edit.flipH, edit.flipV)
 
-    const tempCanvas = document.createElement('canvas')
-    tempCanvas.width = Math.max(1, Math.round(srcW * absCos + srcH * absSin))
-    tempCanvas.height = Math.max(1, Math.round(srcW * absSin + srcH * absCos))
-    const tempCtx = tempCanvas.getContext('2d')!
-    tempCtx.drawImage(canvas, 0, 0)
+    const cropW = Math.max(1, Math.round(edit.crop.width))
+    const cropH = Math.max(1, Math.round(edit.crop.height))
 
-    const cropCanvas = document.createElement('canvas')
-    cropCanvas.width = Math.max(1, canvasW)
-    cropCanvas.height = Math.max(1, canvasH)
-    const cropCtx = cropCanvas.getContext('2d')!
-
-    const rotW = Math.round(srcW * absCos + srcH * absSin)
-    const rotH = Math.round(srcW * absSin + srcH * absCos)
-    const scale = Math.min(rotW / originalWidth, rotH / originalHeight)
-    const sx = edit.crop.x * scale
-    const sy = edit.crop.y * scale
-    const sw = edit.crop.width * scale
-    const sh = edit.crop.height * scale
-
-    cropCtx.drawImage(tempCanvas, sx, sy, sw, sh, 0, 0, canvasW, canvasH)
-
-    const finalCtx = canvas.getContext('2d')!
-    finalCtx.clearRect(0, 0, canvasW, canvasH)
-    finalCtx.drawImage(cropCanvas, 0, 0)
+    finalCanvas = document.createElement('canvas')
+    finalCanvas.width = cropW
+    finalCanvas.height = cropH
+    const finalCtx = finalCanvas.getContext('2d')!
+    finalCtx.imageSmoothingEnabled = true
+    finalCtx.imageSmoothingQuality = 'high'
+    finalCtx.drawImage(
+      rotCanvas,
+      Math.round(edit.crop.x),
+      Math.round(edit.crop.y),
+      cropW,
+      cropH,
+      0,
+      0,
+      cropW,
+      cropH,
+    )
   } else {
-    ctx.save()
-    ctx.translate(canvasW / 2, canvasH / 2)
-    ctx.rotate(radians)
-    if (edit.flipH) ctx.scale(-1, 1)
-    if (edit.flipV) ctx.scale(1, -1)
-    ctx.drawImage(img, -srcW / 2, -srcH / 2, srcW, srcH)
-    ctx.restore()
+    finalCanvas = document.createElement('canvas')
+    finalCanvas.width = Math.max(1, rotW)
+    finalCanvas.height = Math.max(1, rotH)
+    const ctx = finalCanvas.getContext('2d')!
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    if (filterCSS !== 'none') ctx.filter = filterCSS
+    drawRotatedFlipped(ctx, img, srcW, srcH, radians, edit.flipH, edit.flipV)
   }
 
+  const canvasW = finalCanvas.width
+  const canvasH = finalCanvas.height
+
   if (edit.textOverlays.length > 0) {
+    const ctx = finalCanvas.getContext('2d')!
     ctx.filter = 'none'
-    const scaleX = canvasW / (edit.crop ? edit.crop.width : canvasW)
-    const scaleY = canvasH / (edit.crop ? edit.crop.height : canvasH)
 
     for (const overlay of edit.textOverlays) {
       ctx.save()
-      ctx.font = `${Math.round(overlay.fontSize * scaleY)}px ${overlay.fontFamily}`
+      ctx.font = `${overlay.fontSize}px ${overlay.fontFamily}`
       ctx.fillStyle = overlay.fill
       ctx.textBaseline = 'top'
-      ctx.fillText(overlay.text, overlay.x * scaleX, overlay.y * scaleY)
+
+      const tx = edit.crop ? (overlay.x - edit.crop.x) : overlay.x
+      const ty = edit.crop ? (overlay.y - edit.crop.y) : overlay.y
+      ctx.fillText(overlay.text, tx, ty)
       ctx.restore()
     }
   }
 
   const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
+    finalCanvas.toBlob(
       (b) => { if (b) resolve(b); else reject(new Error('Export failed')) },
       format,
       quality,

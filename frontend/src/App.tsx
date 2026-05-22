@@ -23,7 +23,7 @@ function App() {
         transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
         className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]"
       >
-        <BetaBanner onDismiss={() => setBannerVisible(false)} />
+        <BetaBanner onDismiss={() => { setBannerVisible(false); localStorage.setItem('badger-beta-banner-dismissed', '1') }} />
 
         <header
           className={`fixed left-0 right-0 z-40 fade-border-bottom h-16 flex items-center transition-top duration-300 ${bannerVisible ? 'top-[44px]' : 'top-0'}`}

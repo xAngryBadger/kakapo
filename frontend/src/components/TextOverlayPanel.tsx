@@ -76,6 +76,27 @@ export function TextOverlayPanel({ edit, onEditChange }: TextOverlayPanelProps) 
 
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">X</label>
+              <input
+                type="number"
+                value={Math.round(overlay.x)}
+                onChange={(e) => updateOverlay(overlay.id, { x: Math.max(0, parseFloat(e.target.value) || 0) })}
+                className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] transition-colors stat-value"
+              />
+            </div>
+            <div>
+              <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Y</label>
+              <input
+                type="number"
+                value={Math.round(overlay.y)}
+                onChange={(e) => updateOverlay(overlay.id, { y: Math.max(0, parseFloat(e.target.value) || 0) })}
+                className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] transition-colors stat-value"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="eyebrow text-[var(--color-text-muted)] mb-1 block text-[0.625rem]">Size — {overlay.fontSize}px</label>
               <input
                 type="range"

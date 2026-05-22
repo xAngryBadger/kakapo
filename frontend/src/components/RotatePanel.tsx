@@ -3,19 +3,31 @@ import { type EditState, DEFAULT_EDIT_STATE } from '../lib/imageEngine'
 interface RotatePanelProps {
   edit: EditState
   onEditChange: (edit: EditState) => void
+  onEditChangeEnd: () => void
 }
 
-export function RotatePanel({ edit, onEditChange }: RotatePanelProps) {
-  const rotate = (deg: number) =>
-    onEditChange({ ...edit, rotation: (edit.rotation + deg + 360) % 360 })
+export function RotatePanel({ edit, onEditChange, onEditChangeEnd }: RotatePanelProps) {
+  const rotate = (deg: number) => {
+    const next = (edit.rotation + deg + 360) % 360
+    onEditChange({ ...edit, rotation: next })
+    setTimeout(onEditChangeEnd, 0)
+  }
 
-  const flipH = () => onEditChange({ ...edit, flipH: !edit.flipH })
-  const flipV = () => onEditChange({ ...edit, flipV: !edit.flipV })
+  const flipH = () => {
+    onEditChange({ ...edit, flipH: !edit.flipH })
+    setTimeout(onEditChangeEnd, 0)
+  }
+  const flipV = () => {
+    onEditChange({ ...edit, flipV: !edit.flipV })
+    setTimeout(onEditChangeEnd, 0)
+  }
 
   const isDefaultRotation = edit.rotation === 0 && !edit.flipH && !edit.flipV
 
-  const resetTransform = () =>
+  const resetTransform = () => {
     onEditChange({ ...edit, rotation: DEFAULT_EDIT_STATE.rotation, flipH: DEFAULT_EDIT_STATE.flipH, flipV: DEFAULT_EDIT_STATE.flipV })
+    setTimeout(onEditChangeEnd, 0)
+  }
 
   return (
     <div className="space-y-4">
@@ -91,6 +103,7 @@ export function RotatePanel({ edit, onEditChange }: RotatePanelProps) {
           step={1}
           value={edit.rotation}
           onChange={(e) => onEditChange({ ...edit, rotation: parseInt(e.target.value) })}
+          onPointerUp={onEditChangeEnd}
           className="w-full accent-[var(--color-primary)]"
         />
       </div>
