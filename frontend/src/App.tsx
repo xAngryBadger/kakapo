@@ -7,7 +7,7 @@ import { useLenis } from './hooks/useLenis'
 
 function App() {
   const [showPreloader, setShowPreloader] = useState(true)
-  const [bannerVisible, setBannerVisible] = useState(() => !localStorage.getItem('badger-beta-banner-dismissed'))
+  const [bannerDismissed, setBannerDismissed] = useState(() => !!localStorage.getItem('badger-beta-banner-dismissed'))
 
   useLenis()
 
@@ -23,10 +23,10 @@ function App() {
         transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
         className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]"
       >
-        <BetaBanner onDismiss={() => { setBannerVisible(false); localStorage.setItem('badger-beta-banner-dismissed', '1') }} />
+        {!bannerDismissed && <BetaBanner onDismiss={() => { setBannerDismissed(true); localStorage.setItem('badger-beta-banner-dismissed', '1') }} />}
 
         <header
-          className={`fixed left-0 right-0 z-40 h-16 flex items-center transition-top duration-300 ${bannerVisible ? 'top-[76px]' : 'top-0'}`}
+          className={`fixed left-0 right-0 z-40 h-16 flex items-center transition-top duration-300 ${bannerDismissed ? 'top-0' : 'top-[76px]'}`}
           style={{ backdropFilter: 'blur(16px)', backgroundColor: 'rgba(12,10,9,0.8)' }}
         >
           <div className="max-w-7xl mx-auto px-6 w-full flex items-center justify-between">
@@ -50,7 +50,7 @@ function App() {
           </div>
         </header>
 
-        <main className={`max-w-7xl mx-auto px-6 pb-16 lg:px-8 transition-[padding] duration-300 ${bannerVisible ? 'pt-[7rem]' : 'pt-20'}`}>
+        <main className={`max-w-7xl mx-auto px-6 pb-16 lg:px-8 transition-[padding] duration-300 ${bannerDismissed ? 'pt-20' : 'pt-[7rem]'}`}>
         <ImageStudio />
       </main>
 

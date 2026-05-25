@@ -1,0 +1,16 @@
+
+# ============================================================
+# DO NOT FUCKING COMMIT SECRETS — .env, keys, credentials, tokens
+# IF YOU COMMIT THESE YOU WILL HAVE A BAD DAY
+# Keys go in ~/Downloads/SECRET_KEYS_BACKUP.txt, NOT in git
+# ============================================================
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.secret
+credentials.json
+secrets*.json
+oauth_defaults.json
+

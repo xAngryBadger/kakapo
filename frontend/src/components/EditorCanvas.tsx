@@ -195,59 +195,69 @@ export function EditorCanvas({
           style={{ filter: filterCSS !== 'none' ? filterCSS : undefined, transform: transformCSS }}
         />
 
-        {showCrop && crop && (
-          <div
-            className="absolute inset-0"
-            style={{ transform: transformCSS, transformOrigin: 'center center' }}
-          >
-            <div
-              className="absolute border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary)]/5 pointer-events-none"
-              style={{
-                left: `${crop.x * scaleX}px`,
-                top: `${crop.y * scaleY}px`,
-                width: `${crop.width * scaleX}px`,
-                height: `${crop.height * scaleY}px`,
-              }}
-            />
-
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                clipPath: `polygon(
-  0% 0%, 0% 100%, ${(crop.x / originalWidth) * 100}% 100%, ${(crop.x / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%,
-  ${((crop.x + crop.width) / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%, ${((crop.x + crop.width) / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%,
-  ${(crop.x / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%, ${(crop.x / originalWidth) * 100}% 100%, 100% 100%, 100% 0%
-)`,
-                backgroundColor: 'rgba(12,10,9,0.6)',
-              }}
-            />
-
-            {handles.map(({ key, cx, cy }) => (
-              <div
-                key={key}
-                onPointerDown={(e) => handlePointerDown(e, key)}
-                className="absolute w-3 h-3 bg-[var(--color-cream)] border border-[var(--color-primary)] -translate-x-1/2 -translate-y-1/2 z-20"
-                style={{
-                  left: `${cx * scaleX}px`,
-                  top: `${cy * scaleY}px`,
-                  cursor: key ? handleCursor[key] : undefined,
-                }}
-              />
-            ))}
-
-            <div
-              className="absolute z-10"
-              style={{
-                left: `${crop.x * scaleX}px`,
-                top: `${crop.y * scaleY}px`,
-                width: `${crop.width * scaleX}px`,
-                height: `${crop.height * scaleY}px`,
-                cursor: 'move',
-              }}
-              onPointerDown={(e) => handlePointerDown(e, 'move')}
-            />
+    {showCrop && crop && (
+      <>
+        {(edit.rotation !== 0 || edit.flipH || edit.flipV) && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 pointer-events-none">
+            <div className="bg-[var(--color-bg-elevated)] border border-[var(--color-border)] p-4 rounded-sm max-w-xs text-center">
+              <p className="text-sm text-[var(--color-text)] mb-2">
+                Crop overlay shown in unrotated position
+              </p>
+              <p className="label-mono text-[0.625rem] text-[var(--color-primary)]">
+                Reset rotation/flip for accurate crop preview
+              </p>
+            </div>
           </div>
         )}
+
+        <div
+          className="absolute border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary)]/5 pointer-events-none z-10"
+          style={{
+            left: `${crop.x * scaleX}px`,
+            top: `${crop.y * scaleY}px`,
+            width: `${crop.width * scaleX}px`,
+            height: `${crop.height * scaleY}px`,
+          }}
+        />
+
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            clipPath: `polygon(
+              0% 0%, 0% 100%, ${(crop.x / originalWidth) * 100}% 100%, ${(crop.x / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%,
+              ${((crop.x + crop.width) / originalWidth) * 100}% ${(crop.y / originalHeight) * 100}%, ${((crop.x + crop.width) / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%,
+              ${(crop.x / originalWidth) * 100}% ${((crop.y + crop.height) / originalHeight) * 100}%, ${(crop.x / originalWidth) * 100}% 100%, 100% 100%, 100% 0%
+            )`,
+            backgroundColor: 'rgba(12,10,9,0.6)',
+          }}
+        />
+
+        {handles.map(({ key, cx, cy }) => (
+          <div
+            key={key}
+            onPointerDown={(e) => handlePointerDown(e, key)}
+            className="absolute w-3 h-3 bg-[var(--color-cream)] border border-[var(--color-primary)] -translate-x-1/2 -translate-y-1/2 z-20"
+            style={{
+              left: `${cx * scaleX}px`,
+              top: `${cy * scaleY}px`,
+              cursor: key ? handleCursor[key] : undefined,
+            }}
+          />
+        ))}
+
+        <div
+          className="absolute z-10"
+          style={{
+            left: `${crop.x * scaleX}px`,
+            top: `${crop.y * scaleY}px`,
+            width: `${crop.width * scaleX}px`,
+            height: `${crop.height * scaleY}px`,
+            cursor: 'move',
+          }}
+          onPointerDown={(e) => handlePointerDown(e, 'move')}
+        />
+      </>
+    )}
 
         {activeTool === 'text' &&
           edit.textOverlays.map((overlay) => (
